@@ -1,6 +1,53 @@
 require 'rblineprof'
 require 'logger'
 require 'term/ansicolor'
+require 'pp'
+require 'thread'
+require 'json'
+
+=begin
+class Prof
+  def initialize
+    @aggregation = {}
+  end
+
+  def add profile
+    profile.keys.each do |file|
+      puts file
+      if @aggregation[file]
+        @aggregation[file].size.times do |line|
+          (0..3).each do |i|
+            @aggregation[file][line][i] += profile[file][line][i]
+          end
+        end
+      else
+        @aggregation[file] = profile[file].dup
+      end
+    end
+  end
+
+  def format
+    sources = @aggregation.map do |filename, samples|
+      Source.new filename, samples, ::Logger.new(STDOUT)
+    end
+
+    sources.map(&:format).compact.join "\n"
+  end
+end
+
+at_exit do
+  prof = Prof.new
+  File.open(PROFILE_LOG_FILE, 'r') do |f|
+    f.readlines.each do |log_line|
+      log = JSON.parse log_line
+      prof.add [log['filename'], log['samples']]
+    end
+  end
+  puts prof.format
+end
+=end
+
+PROFILE_LOG_FILE='./profile.log'
 
 module Rack
   class Lineprof
@@ -22,15 +69,23 @@ module Rack
     def call env
       request = Rack::Request.new env
       matcher = request.params['lineprof'] || options[:profile]
-      logger  = options[:logger] || ::Logger.new(STDOUT)
 
       return @app.call env unless matcher
 
       response = nil
       profile = lineprof(%r{#{matcher}}) { response = @app.call env }
-
-      logger.debug Term::ANSIColor.blue("\n[Rack::Lineprof] #{'=' * 63}") + "\n\n" +
-           format_profile(profile) + "\n"
+      ::File.open(PROFILE_LOG_FILE, 'w') do |f|
+        f.flock(::File::LOCK_EX)
+        profile.keys.each do |file|
+          f.write(
+            JSON.dump(
+              filename: file,
+              samples: profile[file]
+            )
+          )
+          f.write "\n"
+        end
+      end
 
       response
     end
@@ -45,3 +100,4 @@ module Rack
 
   end
 end
+
