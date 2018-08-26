@@ -5,7 +5,6 @@ require 'pp'
 require 'thread'
 require 'json'
 
-=begin
 class Prof
   def initialize
     @aggregation = {}
@@ -45,7 +44,6 @@ at_exit do
   end
   puts prof.format
 end
-=end
 
 PROFILE_LOG_FILE='./profile.log'
 
@@ -74,7 +72,7 @@ module Rack
 
       response = nil
       profile = lineprof(%r{#{matcher}}) { response = @app.call env }
-      ::File.open(PROFILE_LOG_FILE, 'w') do |f|
+      ::File.open(PROFILE_LOG_FILE, 'a') do |f|
         f.flock(::File::LOCK_EX)
         profile.keys.each do |file|
           f.write(
