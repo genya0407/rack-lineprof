@@ -39,7 +39,7 @@ at_exit do
   File.open(PROFILE_LOG_FILE, 'r') do |f|
     f.readlines.each do |log_line|
       log = JSON.parse log_line
-      prof.add [log['filename'], log['samples']]
+      prof.add({ log['filename'] => log['samples'] })
     end
   end
   puts prof.format
