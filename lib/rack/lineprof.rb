@@ -43,6 +43,7 @@ at_exit do
     end
   end
   puts prof.format
+  STDOUT.flush
 end
 
 PROFILE_LOG_FILE='./profile.log'
