@@ -3,9 +3,8 @@ require 'logger'
 require 'term/ansicolor'
 require 'pp'
 require 'thread'
-require 'json'
 
-class Prof
+class AggregateProfile
   def initialize
     @aggregation = {}
   end
@@ -26,27 +25,35 @@ class Prof
   end
 
   def format
-    sources = @aggregation.map do |filename, samples|
-      Source.new filename, samples, ::Logger.new(STDOUT)
-    end
+    result = ''
+    @aggregation.keys.each do |file|
+      result += "========= #{file} ========="
+      File.readlines(file).each_with_index do |line, num|
+        wall, cpu, calls, _allocations = @aggregation[file][num + 1]
 
-    sources.map(&:format).compact.join "\n"
+        result += if wall > 0 || cpu > 0 || calls > 0
+                    sprintf("% 5.1fms + % 6.1fms (% 4d) | %s", cpu / 1000.0, (wall - cpu) / 1000.0, calls, line)
+                  else
+                    sprintf("                          | %s", line)
+                  end
+      end
+      result += "\n"
+    end
+    result
   end
 end
 
+$queue = Queue.new
 at_exit do
-  prof = Prof.new
-  File.open(PROFILE_LOG_FILE, 'r') do |f|
-    f.readlines.each do |log_line|
-      log = JSON.parse log_line
-      prof.add({ log['filename'] => log['samples'] })
-    end
+  puts 'finished!!!!!!!!'
+  puts $queue.length
+  prof = AggregateProfile.new
+  while !$queue.empty?
+    prof.add $queue.pop
   end
   puts prof.format
   STDOUT.flush
 end
-
-PROFILE_LOG_FILE='./profile.log'
 
 module Rack
   class Lineprof
@@ -73,18 +80,7 @@ module Rack
 
       response = nil
       profile = lineprof(%r{#{matcher}}) { response = @app.call env }
-      ::File.open(PROFILE_LOG_FILE, 'a') do |f|
-        f.flock(::File::LOCK_EX)
-        profile.keys.each do |file|
-          f.write(
-            JSON.dump(
-              filename: file,
-              samples: profile[file]
-            )
-          )
-          f.write "\n"
-        end
-      end
+      $queue.push profile
 
       response
     end
